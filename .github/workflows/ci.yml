@@ -115,8 +115,13 @@ jobs:
             --security-opt no-new-privileges -p 8080:8080 \
             -e CUSTODY_SIGNING_KEY="$KEY" -e CUSTODY_TOKEN_SECRET=ci-secret \
             -v ci-data:/var/lib/custody evidence-custody:ci
-          curl -fsS --retry 30 --retry-delay 1 --retry-connrefused localhost:8080/readyz
-          curl -fsS localhost:8080/metrics | grep -q custody_open_alerts
+          # docker-proxy accepts the TCP connection before uvicorn is listening, so the early
+          # attempts are *reset* (curl exit 56), not refused. --retry-all-errors covers both.
+          if ! curl -fsS --retry 40 --retry-delay 1 --retry-connrefused --retry-all-errors \
+                --max-time 5 localhost:8080/readyz; then
+            echo "::error::container never became ready"; docker logs custody-smoke; exit 1
+          fi
+          curl -fsS --max-time 5 localhost:8080/metrics | grep -q custody_open_alerts
       - name: Container logs
         if: always()
         run: |
