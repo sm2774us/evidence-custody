@@ -1,5 +1,5 @@
 import { describe, expect, it } from "vitest";
-import vector from "../../tests/vectors/manifest_vector.json";
+import vector from "./fixtures/manifest_vector.json";
 import { PERMISSIONS, can, decodeToken, secondsLeft } from "../src/lib/auth";
 import { canonicalJson } from "../src/lib/canonical";
 import { fromHex, sha256Hex, verifyEd25519 } from "../src/lib/crypto";

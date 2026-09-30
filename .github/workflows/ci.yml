@@ -163,8 +163,13 @@ jobs:
     steps:
       - uses: actions/checkout@v4
         with: { persist-credentials: false }
-      - name: Prepare environment
-        run: cp .env.example .env
+      - name: Prepare environment (throwaway secrets for this run only)
+        run: |
+          {
+            grep -vE '^CUSTODY_(SIGNING_KEY|TOKEN_SECRET)=' .env.example
+            echo "CUSTODY_SIGNING_KEY=$(openssl rand -hex 32)"
+            echo "CUSTODY_TOKEN_SECRET=$(openssl rand -hex 32)"
+          } > .env
       - name: Build and start API + console
         run: docker compose up -d --build --wait --wait-timeout 180
       - name: Console serves the SPA and proxies the API
