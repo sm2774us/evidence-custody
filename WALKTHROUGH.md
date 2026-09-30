@@ -277,7 +277,7 @@ Things most likely to fail on a brand-new repo (none are bugs in your code):
 | Symptom | Cause / fix |
 |---|---|
 | Trivy report shows findings | Informational in CI (see the job summary). Only fixable CRITICAL findings block a release. |
-| `security` workflow: CodeQL or dependency-review errors | Private repo without the paid feature, or dependency graph not enabled (Part 6 step 5). |
+| `security` workflow: CodeQL errors | Private repo without the paid feature. Dependency-review is non-blocking; it needs the Dependency graph (`gh api -X PUT repos/:owner/:repo/vulnerability-alerts`). |
 | `workflows-lint` flags a workflow | actionlint found a real nit. It names the file and line. |
 | Lint fails only in CI | A newer ruff/mypy than the one you tested with. Fix the flagged line. |
 
