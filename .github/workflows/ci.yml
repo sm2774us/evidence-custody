@@ -111,13 +111,17 @@ jobs:
         env:
           KEY: "0000000000000000000000000000000000000000000000000000000000000001"
         run: |
-          docker run -d --name c --read-only --tmpfs /tmp --cap-drop ALL \
+          docker run -d --name custody-smoke --read-only --tmpfs /tmp --cap-drop ALL \
             --security-opt no-new-privileges -p 8080:8080 \
             -e CUSTODY_SIGNING_KEY="$KEY" -e CUSTODY_TOKEN_SECRET=ci-secret \
             -v ci-data:/var/lib/custody evidence-custody:ci
           curl -fsS --retry 30 --retry-delay 1 --retry-connrefused localhost:8080/readyz
           curl -fsS localhost:8080/metrics | grep -q custody_open_alerts
-          docker logs c
+      - name: Container logs
+        if: always()
+        run: |
+          docker logs custody-smoke || true
+          docker rm -f custody-smoke || true
 
   ci-ok:
     name: ci-ok (required check)
