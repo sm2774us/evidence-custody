@@ -34,11 +34,26 @@ Docker/Kubernetes, and a CI/CD pipeline with signing, SBOM and provenance.
 
 ## Quick start
 ```bash
-pip install -c constraints.txt -e ".[dev,mcp]"
-custody-admin demo          # flaky network + corruption + tampered object + custody report
-make check                  # ruff, mypy, pytest (>=88% cov), evals, TypeScript
-custody-admin init > .env   # keys, then: python -m custody.app   (OpenAPI at /docs)
+# Linux / WSL Ubuntu (native)                     # Windows 11: see WALKTHROUGH.md (Docker Desktop)
+bash scripts/setup-linux.sh --install            # one time: Python 3.12+, Node 22, git, make
+bash scripts/check.sh                            # ruff, mypy, pytest, evals, SDK, web console
+bash scripts/dev.sh                              # API :8080 + Evidence Console :5173 (hot reload)
+bash scripts/dev-token.sh auditor                # a login token for the console
+
+# Anywhere Docker runs
+cp .env.example .env && docker compose up -d --build   # API :8080, console http://localhost:8081
+docker compose run --rm api custody-admin demo         # flaky network + corruption + tamper + custody report
 ```
+
+## Evidence Console (web)
+A production-minded React 19 + TypeScript front end in `web/`, talking only to the existing API:
+sign-in with a scoped bearer token, an **assistant** that turns plain requests into permission-checked
+API calls (works with no AI), dashboard, evidence viewer with **in-browser SHA-256 and Ed25519
+verification**, upload/quarantine review, alerts, audit-log browser, device management.
+Stack: Vite, Tailwind 4, shadcn/ui-style components on Radix, TanStack Query/Table/Router, Zustand, Motion.
+Ships as a non-root nginx image with a strict CSP and a same-origin API proxy, and has its own CI gate
+(lint, types, tests with coverage floor, build) plus a compose-based full-stack smoke test.
+Design, screens and requirements: `docs/Solution-Deep-Dive.md`, `docs/SRS.md`, `docs/SRS-Compliance.md`.
 
 ## AI, where it earns its place — and nowhere else
 * **Incident triage** (`triage.py`): deterministic rules produce the advisory; an LLM *optionally* adds a
@@ -51,8 +66,8 @@ custody-admin init > .env   # keys, then: python -m custody.app   (OpenAPI at /d
 * Quarantine, acceptance and acknowledgement are decided **only** by hashes and signatures.
 
 ## Layout
-`src/custody` service · `sdk-ts` Node/TS SDK · `evals` triage golden set · `deploy` Terraform + k8s ·
-`docs` architecture, threat model, CJIS mapping, runbook · `.github/workflows` CI, security, AI evals, release.
+`src/custody` service · `web` Evidence Console (React) · `sdk-ts` Node/TS SDK · `evals` triage golden set · `deploy` Terraform + k8s ·
+`scripts` Windows + Linux/WSL helpers · `docs` architecture, threat model, CJIS mapping, runbook, deep dive, SRS · `.github/workflows` CI, security, AI evals, release.
 
 ## Status and honest limits
 See `docs/ARCHITECTURE.md#known-limits`. Notably: metadata store is SQLite (single writer; PostgreSQL adapter is the

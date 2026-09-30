@@ -26,6 +26,11 @@ def main(argv: list[str] | None = None) -> int:
     for name in ("verify-audit", "checkpoint", "fixity", "expire", "scan"):
         sub.add_parser(name)
     sub.add_parser("demo", help="run the end-to-end simulation")
+    sd = sub.add_parser(
+        "seed",
+        help="DEV ONLY: load sample data into a running server (needs the same .env secrets)",
+    )
+    sd.add_argument("--url", default="http://localhost:8080")
     a = ap.parse_args(argv)
 
     if a.cmd == "init":
@@ -38,6 +43,17 @@ def main(argv: list[str] | None = None) -> int:
 
         return run_demo()
     s = Settings.from_env()
+    if a.cmd == "seed":
+        import httpx
+
+        from .simulate import run_seed
+
+        if not s.token_secret:
+            print("CUSTODY_TOKEN_SECRET is not set; use the same .env as the server.")
+            return 2
+        with httpx.Client(base_url=a.url, timeout=30) as http:
+            run_seed(http, s.token_secret)
+        return 0
     if a.cmd == "issue-token":
         print(
             issue_token(
