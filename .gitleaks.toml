@@ -5,4 +5,7 @@ useDefault = true
 
 [allowlist]
 description = "Synthetic cross-language signing vector (deterministic test data, no real secrets)"
-paths = ['''tests/vectors/manifest_vector\.json''']
+paths = [
+  '''tests/vectors/manifest_vector\.json''',
+  '''web/test/fixtures/manifest_vector\.json''',   # byte-identical copy, guarded by tests/test_web_fixture_sync.py
+]

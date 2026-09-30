@@ -49,6 +49,16 @@ jobs:
             ${{ env.IMAGE }}:latest
           provenance: mode=max
           cache-from: type=gha
+      - id: build_web
+        name: Build and push console image
+        uses: docker/build-push-action@v6
+        with:
+          context: web
+          push: true
+          tags: |
+            ${{ env.IMAGE }}-web:${{ github.ref_name }}
+            ${{ env.IMAGE }}-web:latest
+          provenance: mode=max
       - name: SBOM (SPDX)
         uses: anchore/sbom-action@v0
         with:
@@ -56,8 +66,10 @@ jobs:
           format: spdx-json
           output-file: sbom.spdx.json
       - uses: sigstore/cosign-installer@v3
-      - name: Sign image by digest (keyless)
-        run: cosign sign --yes "$IMAGE@${{ steps.build.outputs.digest }}"
+      - name: Sign images by digest (keyless)
+        run: |
+          cosign sign --yes "$IMAGE@${{ steps.build.outputs.digest }}"
+          cosign sign --yes "$IMAGE-web@${{ steps.build_web.outputs.digest }}"
       - uses: actions/attest-build-provenance@v2
         with:
           subject-name: ${{ env.IMAGE }}

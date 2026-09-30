@@ -9,6 +9,14 @@
 *.mts           text eol=lf
 *.js            text eol=lf
 *.mjs           text eol=lf
+*.tsx           text eol=lf
+*.css           text eol=lf
+*.html          text eol=lf diff=html
+*.svg           text eol=lf
+*.inc           text eol=lf
+*.template      text eol=lf
+*.cmd           text eol=crlf
+*.ps1           text eol=crlf
 *.tf            text eol=lf
 *.tfvars        text eol=lf
 *.sql           text eol=lf
@@ -56,6 +64,7 @@ evals/cases.jsonl       -text
 
 # Lockfiles / pins: hide from diffs, never auto-merge (regenerate instead)
 sdk-ts/package-lock.json        -diff -merge linguist-generated=true
+web/package-lock.json           -diff -merge linguist-generated=true
 constraints.txt                 -merge linguist-generated=true
 **/.terraform.lock.hcl          -diff -merge linguist-generated=true
 

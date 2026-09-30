@@ -7,4 +7,7 @@ if errorlevel 1 exit /b 1
 echo == TypeScript SDK ==
 docker run --rm -v "%cd%":/src:ro node:22-slim sh -c "cp -r /src /tmp/w && cd /tmp/w/sdk-ts && npm ci --ignore-scripts --no-audit --no-fund && npm run typecheck && npm test"
 if errorlevel 1 exit /b 1
+echo == Web console ==
+docker run --rm -v "%cd%":/src:ro node:22-slim sh -c "cp -r /src /tmp/w && cd /tmp/w/web && npm ci --ignore-scripts --no-audit --no-fund && npm run check"
+if errorlevel 1 exit /b 1
 echo All checks passed.

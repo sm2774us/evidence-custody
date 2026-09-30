@@ -2,10 +2,14 @@
 
 from __future__ import annotations
 
+import contextlib
 import hashlib
 import os
 import random
+import secrets
 import tempfile
+import time
+from collections.abc import Callable
 from pathlib import Path
 from typing import cast
 
@@ -72,6 +76,50 @@ def run_demo() -> int:
         print(f"[5] audit verify: {v['ok']} ({v['entries']} entries)")
         random.seed(0)
         return 0 if v["ok"] and r["fixity_ok"] else 1
+
+
+def run_seed(http: httpx.Client, token_secret: str, device_id: str | None = None,
+             say: Callable[[str], None] = print) -> dict[str, str]:  # fmt: skip
+    """Populate a LIVE server with a small, realistic data set so the console has something to show.
+
+    Registers and activates one camera (two different admins), stores one recording, attempts one
+    tampered recording (quarantine + alert) and leaves sequence gaps (2 and 3 never arrive intact). Safe to re-run: every run
+    uses a fresh device id.
+    """
+    now = int(time.time() * 1000)
+
+    def h(sub: str, role: str) -> dict[str, str]:
+        return {
+            "authorization": f"Bearer {issue_token(token_secret, sub, Role(role), 'agency-1', now, 3600)}"
+        }
+
+    cam = DeviceIdentity(device_id or f"cam-{secrets.token_hex(2)}", "officer-77", "agency-1")
+    r = http.post("/v1/devices", headers=h("seed-admin-a", "admin"), json={
+        "device_id": cam.device_id, "public_key": cam.public_hex,
+        "officer_id": cam.officer_id, "agency_id": "agency-1"})  # fmt: skip
+    r.raise_for_status()
+    http.post(
+        f"/v1/devices/{cam.device_id}/activate", headers=h("seed-admin-b", "admin")
+    ).raise_for_status()
+    cl = UploadClient(http, h(cam.device_id, "device")["authorization"].split(" ", 1)[1], cam,
+                      sleep=lambda _: None)  # fmt: skip
+    data = os.urandom(2 * 1024 * 1024 + 17)
+    rec = cl.upload(data, sequence_no=1, chunk_size=1024 * 1024, case_id="INC-2026-0042")
+    out = {"device_id": cam.device_id, "evidence_id": rec["receipt"]["evidence_id"]}
+    with contextlib.suppress(UploadError):
+        cl.upload(data, sequence_no=2, chunk_size=1024 * 1024,
+                  full_sha256=hashlib.sha256(b"not the file").hexdigest())  # fmt: skip
+    cl.upload(
+        os.urandom(300_000), sequence_no=4, chunk_size=1024 * 1024
+    )  # sequence 3 never arrives
+    alerts = http.get("/v1/alerts", headers=h("seed-auditor", "auditor")).json()["alerts"]
+    bad = [a for a in alerts if a["kind"] == "HASH_MISMATCH" and a.get("object_id")]
+    if bad:
+        out["quarantined_upload_id"] = bad[0]["object_id"]
+    for k, v in out.items():
+        say(f"{k:22} {v}")
+    say(f"Devices page > Sequence gap check for {cam.device_id}: unsent recordings show as gaps.")
+    return out
 
 
 if __name__ == "__main__":  # pragma: no cover

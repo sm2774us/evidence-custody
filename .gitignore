@@ -9,5 +9,10 @@ coverage.xml
 node_modules/
 data/
 .env
+.env.dev
+.dev-data/
+web/node_modules/
+web/dist/
+web/coverage/
 dist/
 build/

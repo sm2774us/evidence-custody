@@ -1,4 +1,4 @@
-# Evidence Custody: Beginner Walkthrough (Windows 11)
+# Evidence Custody: Beginner Walkthrough (Windows 11, with an Ubuntu/WSL path in Part 10)
 
 Goal: get this project running on your PC, understand it well enough to change it
 with confidence, publish it to your own GitHub, and protect `main` so **nothing
@@ -10,6 +10,10 @@ the project was built and tested on.
 
 There is no bot that opens branches or pull requests (no Dependabot), and nothing
 merges by itself. Four workflows exist; Part 8 explains exactly what each one does.
+
+> **Which path do I follow?** Parts 1 to 9 are for **Windows 11** (Command Prompt + Docker Desktop).
+> If you develop on **Ubuntu or WSL Ubuntu**, follow **Part 10**; it maps every step to a Linux command.
+> Both paths run the same code and the same checks. Part 4b shows the new **web console**.
 
 Use **Command Prompt** (press the Windows key, type `cmd`, press Enter) unless a
 step says otherwise.
@@ -189,6 +193,41 @@ docker compose down -v
 
 ---
 
+## Part 4b: Use the web console (the friendly front end)
+
+The project ships a browser app, the **Evidence Console**: a dashboard, an assistant you can type
+plain requests into ("open alerts", "custody report ev_..."), evidence and upload viewers, an audit log
+browser, and device management. It only talks to the API you already have; it adds no new server logic.
+
+1. Start everything: `docker compose up -d --build` (first build takes a few minutes).
+2. Open **http://localhost:8081** in your browser. The page asks for an **access token**.
+3. Make a token (this is the same tool as Part 4; pick the role you want to try):
+
+```
+docker compose run --rm api custody-admin issue-token --sub aud-1 --role auditor --agency agency-1
+```
+
+   Tokens only work if they are signed with the same `.env` secrets as the server. Part 4 step 1 set that up; do it first if you skipped it.
+4. Paste the token, press **Sign in**. Try: **Dashboard**, then **Assistant** and type `status`.
+5. Different roles see different menus: `auditor` sees Audit log and Alerts; `reader` only Evidence;
+   `admin` sees Devices. The server enforces this; the menu just hides what you cannot use.
+6. The console starts empty. Load sample data into the **running** server (needs the Part 4 secrets):
+
+```
+docker compose run --rm api custody-admin seed --url http://api:8080
+```
+
+   It prints a `device_id`, an `evidence_id` (`ev_...`) and a `quarantined_upload_id` (`up_...`).
+   Paste those into the Assistant (`evidence ev_...`, `why up_...`) or the Evidence, Uploads and
+   Devices pages. The demo command from Part 3 uses a throwaway in-memory server, so its IDs
+   will not exist here. Use `seed` for the console.
+
+The token lives in your browser tab only and disappears when you close the tab or sign out.
+Stop with `docker compose down`. **Developing the UI?** run `npm ci && npm run dev` inside `web/`
+(Linux path in Part 10 has a one-command version), then open http://localhost:5173.
+
+---
+
 ## Part 5: Run every check (what CI runs, on your PC)
 
 ```
@@ -340,10 +379,10 @@ git pull
 
 | Workflow | When it runs | What it does |
 |---|---|---|
-| `CI` | Automatically on pushes to `main` and on pull requests | Lint, types, tests, evals, demo, TypeScript checks, workflow lint, container build + scan. Never merges or creates anything. |
+| `CI` | Automatically on pushes to `main` and on pull requests | Python tests (3.12 and 3.13), TypeScript SDK, **web console** (lint, types, tests, production build), workflow lint, API container build + scan, and a **full-stack job** that starts API + console with `docker compose` and probes them. Never merges or creates anything. |
 | `Security` | Pushes to `main`, pull requests, and **every Monday** | CodeQL, dependency audit, secret scan. Failures appear as red checks or a job summary. Opens no PRs. |
 | `AI evals` | Manually, weekly, and on pull requests that touch `triage.py` or `evals/` | Scores the optional AI triage. With no API key it skips the AI part and still checks the rules. |
-| `Release` | Only when you push a version tag | Runs CI, publishes a signed Docker image to GitHub Packages, attaches an SBOM, creates a GitHub Release. |
+| `Release` | Only when you push a version tag | Runs CI, publishes signed Docker images (API and console) to GitHub Packages, attaches an SBOM, creates a GitHub Release. |
 
 Weekly runs only **report**. Nothing they do changes your code.
 
@@ -410,6 +449,65 @@ role still can't do the forbidden thing.
 
 ---
 
+## Part 10: Ubuntu / WSL Ubuntu path (alternative to Windows)
+
+Everything above works on Linux too, with a native toolchain instead of containers-only.
+
+**Where to keep the code.** On WSL, keep the repo **inside the Linux filesystem** (`~/evidence-custody`),
+not under `/mnt/c/...`. The Windows drive is slow and breaks file permissions. Scripts warn you if you do.
+
+### 10a. One-time setup
+```bash
+# WSL: install Ubuntu from the Microsoft Store, open it. Native Ubuntu: open a terminal.
+sudo apt-get update && sudo apt-get install -y git
+git clone https://github.com/YOUR_GITHUB_USERNAME/evidence-custody.git ~/evidence-custody   # or unzip the zip
+cd ~/evidence-custody
+bash scripts/setup-linux.sh            # reports what is missing, changes nothing
+bash scripts/setup-linux.sh --install  # installs git, make, curl, jq, Python venv, Node 22 (asks for sudo)
+```
+Docker is optional on Linux (needed for `docker compose up` and the `--docker` check mode):
+* **WSL:** install Docker Desktop for Windows and enable *Settings, Resources, WSL integration* for your distro.
+* **Ubuntu:** follow the official guide, https://docs.docker.com/engine/install/ubuntu/, then
+  `sudo usermod -aG docker $USER` and log out and back in.
+
+Use `bash scripts/NAME.sh` (rather than `./scripts/NAME.sh`) so a lost executable bit never matters.
+
+### 10b. Windows step, Linux equivalent
+
+| Task | Windows 11 | Ubuntu / WSL |
+|---|---|---|
+| Put your username in the project | `powershell ... set-owner.ps1 -Owner NAME` | `bash scripts/set-owner.sh NAME` |
+| Run every CI check | `scripts\check.cmd` (containers) | `bash scripts/check.sh` (native; `--docker` for containers) |
+| Demo | `docker compose run --rm api custody-admin demo` | same, or `make demo` after `bash scripts/check.sh` created `.venv` |
+| Run API + console with Docker | `docker compose up -d --build` | same |
+| Develop with hot reload (no Docker) | run `npm run dev` in `web/` and the API by hand | `bash scripts/dev.sh` (API :8080 + console :5173) |
+| Get a login token in dev mode | `docker compose run --rm api custody-admin issue-token ...` | `bash scripts/dev-token.sh auditor` |
+| Load sample data for the console | `docker compose run --rm api custody-admin seed --url http://api:8080` | with `dev.sh` running: `set -a; . ./.env.dev; set +a; custody-admin seed` |
+| Copy `.env` | `copy .env.example .env` | `cp .env.example .env` |
+| Reset everything | `docker compose down -v` | same, plus `rm -rf .venv .dev-data .env.dev` |
+
+### 10c. The daily loop on Linux
+```bash
+bash scripts/dev.sh                    # terminal 1: API + console with hot reload; Ctrl+C stops both
+bash scripts/dev-token.sh custodian    # terminal 2: prints a token; paste it at http://localhost:5173
+bash scripts/check.sh                  # before every commit: python + SDK + web, same gates as CI
+```
+`dev.sh` creates `.env.dev` (development secrets, git-ignored) once, so tokens stay valid across restarts.
+Git, `gh`, branches, PRs and branch protection (Parts 6 to 9) are identical; only the `set-owner` step differs.
+
+### 10d. Linux troubleshooting
+| Problem | Fix |
+|---|---|
+| `python3 -m venv` fails | `sudo apt-get install -y python3-venv` (or `setup-linux.sh --install`). |
+| Ubuntu 22.04 has Python 3.10 | The project needs 3.12+. Use Ubuntu 24.04, or `sudo add-apt-repository ppa:deadsnakes/ppa` and install `python3.12-venv`. |
+| `permission denied` running a script | Run it as `bash scripts/NAME.sh`. |
+| Docker: "permission denied ... docker.sock" | `sudo usermod -aG docker $USER`, then log out and in (WSL: `wsl --shutdown` from Windows). |
+| WSL: Docker "cannot connect" | Start Docker Desktop; enable WSL integration for this distro. |
+| Very slow `npm ci` / tests on WSL | The repo is under `/mnt/c`. Move it to `~/`. |
+| Port 5173 or 8080 busy | Stop the other process (`ss -ltnp | grep 8080`) or `docker compose down`. |
+
+---
+
 ## Troubleshooting
 
 | Problem | Fix |
@@ -425,6 +523,9 @@ role still can't do the forbidden thing.
 | `gh api ... rulesets` says 403 or "upgrade" | Private repos need a paid plan for rulesets. Make the repo public or use classic protection: Settings → Branches → Add rule → require a pull request and the status check `ci-ok (required check)`. |
 | Merge button is greyed out | A check is still running or failed. `gh pr checks` shows which. |
 | Rule says a check "is expected" but never appears | The name must match exactly: `ci-ok (required check)` (the job name in `.github/workflows/ci.yml`). |
+| Console shows "API unreachable" | The API container is down or still starting: `docker compose ps`, then `docker compose logs api`. |
+| Console keeps returning to sign-in | The token expired (default 15 minutes) or was issued with different secrets. Issue a fresh one. |
+| Console says "Not permitted" | Your token's role lacks that permission. Intended. Sign in with another role. |
 | Pushed straight to `main` and it was rejected | That is the protection working. Create a branch (Part 8). |
 
 ---
@@ -443,6 +544,7 @@ powershell -ExecutionPolicy Bypass -File .\scripts\set-owner.ps1 -Owner YOUR_GIT
 copy .env.example .env
 docker compose build
 docker compose run --rm api custody-admin demo
+docker compose up -d --build   :: console at http://localhost:8081
 scripts\check.cmd
 git init
 git branch -M main
@@ -466,4 +568,15 @@ gh pr view --web
 gh pr merge --squash --delete-branch
 git switch main
 git pull
+```
+
+Ubuntu / WSL (Part 10), the whole sequence:
+
+```
+sudo apt-get update && sudo apt-get install -y git
+git clone <your repo or unzip> ~/evidence-custody && cd ~/evidence-custody
+bash scripts/setup-linux.sh --install
+bash scripts/set-owner.sh YOUR_GITHUB_USERNAME
+bash scripts/check.sh
+bash scripts/dev.sh                     # + bash scripts/dev-token.sh auditor in a second terminal
 ```
