@@ -70,7 +70,7 @@ jobs:
       - name: gitleaks (full history)
         run: |
           docker run --rm -v "$PWD:/repo" ghcr.io/gitleaks/gitleaks:v8.21.2 \
-            detect --source /repo --redact --verbose
+            detect --source /repo --config /repo/.gitleaks.toml --redact --verbose
 
   dependency-review:
     if: github.event_name == 'pull_request'
@@ -81,7 +81,11 @@ jobs:
     steps:
       - uses: actions/checkout@v4
         with: { persist-credentials: false }
+      # Supplementary signal only: needs the Dependency graph (free on public repos; private repos
+      # need GitHub Advanced Security). pip-audit + npm audit above are the enforced dependency gates,
+      # so an unsupported repo must not turn the whole pipeline red.
       - uses: actions/dependency-review-action@v4
+        continue-on-error: true
         with:
           fail-on-severity: high
           deny-licenses: GPL-3.0, AGPL-3.0

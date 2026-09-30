@@ -1,0 +1,8 @@
+title = "evidence-custody"
+
+[extend]
+useDefault = true
+
+[allowlist]
+description = "Synthetic cross-language signing vector (deterministic test data, no real secrets)"
+paths = ['''tests/vectors/manifest_vector\.json''']
