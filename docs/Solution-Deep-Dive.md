@@ -198,11 +198,11 @@ flowchart TD
     D --> AU[Audit log /audit]
     D --> DV[Devices /devices]
     D --> S[Settings /settings]
-    A -. "cards link to" .-> ED
-    A -. .-> UD
-    AL -. "object id" .-> UD
-    UD -. "evidence id" .-> ED
-    ANY(("any page")) -->|"401 / expiry / sign out"| L
+    A -.->|cards link to| ED
+    A -.-> UD
+    AL -.->|object id| UD
+    UD -.->|evidence id| ED
+    ANY(("any page")) -->|401 / expiry / sign out| L
 ```
 
 Menu visibility by role (X = item shown; the server has the last word):
