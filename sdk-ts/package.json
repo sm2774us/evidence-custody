@@ -1,0 +1,17 @@
+{
+  "name": "@evidence-custody/sdk",
+  "version": "1.0.0",
+  "description": "TypeScript/Node SDK: signed manifests and resumable, idempotent evidence upload",
+  "type": "module",
+  "engines": { "node": ">=22.18" },
+  "main": "src/uploader.ts",
+  "scripts": {
+    "typecheck": "tsc --noEmit",
+    "test": "node --test test/*.test.ts"
+  },
+  "devDependencies": {
+    "@types/node": "^22.10.0",
+    "typescript": "^5.6.0"
+  },
+  "license": "Apache-2.0"
+}

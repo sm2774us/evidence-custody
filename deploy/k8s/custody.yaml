@@ -1,0 +1,80 @@
+# Reference manifests. The bundled SQLite metadata store is single-writer, hence replicas: 1.
+# Scale-out requires the PostgreSQL adapter (see docs/ARCHITECTURE.md, "Known limits").
+apiVersion: v1
+kind: Namespace
+metadata:
+  name: evidence-custody
+  labels: { pod-security.kubernetes.io/enforce: restricted }
+---
+apiVersion: apps/v1
+kind: StatefulSet
+metadata: { name: custody, namespace: evidence-custody }
+spec:
+  serviceName: custody
+  replicas: 1
+  selector: { matchLabels: { app: custody } }
+  template:
+    metadata: { labels: { app: custody } }
+    spec:
+      automountServiceAccountToken: false
+      securityContext: { runAsNonRoot: true, runAsUser: 10001, fsGroup: 10001, seccompProfile: { type: RuntimeDefault } }
+      containers:
+        - name: api
+          image: ghcr.io/your-org/evidence-custody:1.0.0   # pin by digest in production
+          ports: [{ containerPort: 8080 }]
+          envFrom: [{ secretRef: { name: custody-secrets } }]
+          env: [{ name: CUSTODY_DATA_DIR, value: /var/lib/custody }]
+          readinessProbe: { httpGet: { path: /readyz, port: 8080 }, periodSeconds: 10 }
+          livenessProbe: { httpGet: { path: /healthz, port: 8080 }, periodSeconds: 15 }
+          resources: { requests: { cpu: 250m, memory: 256Mi }, limits: { memory: 1Gi } }
+          securityContext: { allowPrivilegeEscalation: false, readOnlyRootFilesystem: true, capabilities: { drop: [ALL] } }
+          volumeMounts:
+            - { name: data, mountPath: /var/lib/custody }
+            - { name: tmp, mountPath: /tmp }
+      volumes: [{ name: tmp, emptyDir: {} }]
+  volumeClaimTemplates:
+    - metadata: { name: data }
+      spec: { accessModes: [ReadWriteOnce], resources: { requests: { storage: 200Gi } } }
+---
+apiVersion: v1
+kind: Service
+metadata: { name: custody, namespace: evidence-custody }
+spec: { selector: { app: custody }, ports: [{ port: 80, targetPort: 8080 }] }
+---
+apiVersion: networking.k8s.io/v1
+kind: NetworkPolicy
+metadata: { name: default-deny-then-allow, namespace: evidence-custody }
+spec:
+  podSelector: { matchLabels: { app: custody } }
+  policyTypes: [Ingress, Egress]
+  ingress:
+    - from: [{ namespaceSelector: { matchLabels: { name: ingress } } }]
+      ports: [{ port: 8080 }]
+  egress:
+    - to: [{ namespaceSelector: {} }]   # DNS; tighten to S3 endpoints / AI egress proxy
+      ports: [{ port: 53, protocol: UDP }, { port: 443 }]
+---
+apiVersion: batch/v1
+kind: CronJob
+metadata: { name: fixity-and-checkpoint, namespace: evidence-custody }
+spec:
+  schedule: "17 */6 * * *"
+  concurrencyPolicy: Forbid
+  jobTemplate:
+    spec:
+      template:
+        spec:
+          restartPolicy: Never
+          securityContext: { runAsNonRoot: true, runAsUser: 10001, fsGroup: 10001 }
+          containers:
+            - name: ops
+              image: ghcr.io/your-org/evidence-custody:1.0.0
+              command: ["sh", "-c", "custody-admin fixity && custody-admin checkpoint && custody-admin scan && custody-admin verify-audit"]
+              envFrom: [{ secretRef: { name: custody-secrets } }]
+              env: [{ name: CUSTODY_DATA_DIR, value: /var/lib/custody }]
+              securityContext: { allowPrivilegeEscalation: false, readOnlyRootFilesystem: true, capabilities: { drop: [ALL] } }
+---
+apiVersion: policy/v1
+kind: PodDisruptionBudget
+metadata: { name: custody, namespace: evidence-custody }
+spec: { maxUnavailable: 0, selector: { matchLabels: { app: custody } } }

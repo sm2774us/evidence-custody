@@ -1,0 +1,12 @@
+services:
+  api:
+    build: .
+    ports: ["8080:8080"]
+    env_file: .env
+    read_only: true
+    tmpfs: ["/tmp"]
+    cap_drop: [ALL]
+    security_opt: ["no-new-privileges:true"]
+    volumes: ["custody-data:/var/lib/custody"]
+volumes:
+  custody-data:

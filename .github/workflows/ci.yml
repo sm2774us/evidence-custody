@@ -1,0 +1,127 @@
+name: CI
+
+on:
+  push:
+    branches: [main]
+  pull_request:
+  workflow_call:
+
+permissions:
+  contents: read
+
+concurrency:
+  group: ci-${{ github.workflow }}-${{ github.ref }}
+  cancel-in-progress: ${{ github.event_name == 'pull_request' }}
+
+env:
+  PIP_DISABLE_PIP_VERSION_CHECK: "1"
+
+jobs:
+  python:
+    name: python ${{ matrix.python }}
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+    strategy:
+      fail-fast: false
+      matrix:
+        python: ["3.12", "3.13"]
+    steps:
+      - uses: actions/checkout@v4
+        with: { persist-credentials: false }
+      - uses: actions/setup-python@v5
+        with:
+          python-version: ${{ matrix.python }}
+          cache: pip
+          cache-dependency-path: |
+            pyproject.toml
+            constraints.txt
+      - name: Install (constrained, reproducible)
+        run: pip install -c constraints.txt -e ".[dev,mcp]"
+      - name: Lint
+        run: ruff check . && ruff format --check .
+      - name: Types
+        run: mypy src
+      - name: Tests + coverage gate
+        run: pytest --cov=custody --cov-report=term-missing --cov-report=xml
+      - name: Deterministic triage evals (no AI, no secrets)
+        run: python evals/run.py --rules-only --report eval-rules.json
+      - name: End-to-end simulation (flaky network, corruption, tamper)
+        run: custody-admin demo
+      - uses: actions/upload-artifact@v4
+        if: matrix.python == '3.13'
+        with:
+          name: python-reports
+          path: |
+            coverage.xml
+            eval-rules.json
+          retention-days: 14
+
+  typescript:
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    defaults: { run: { working-directory: sdk-ts } }
+    steps:
+      - uses: actions/checkout@v4
+        with: { persist-credentials: false }
+      - uses: actions/setup-node@v4
+        with:
+          node-version: "22"
+          cache: npm
+          cache-dependency-path: sdk-ts/package-lock.json
+      - run: npm ci --ignore-scripts
+      - run: npm run typecheck
+      - name: Tests (includes cross-language signature vector)
+        run: npm test
+
+  workflows-lint:
+    runs-on: ubuntu-latest
+    timeout-minutes: 5
+    steps:
+      - uses: actions/checkout@v4
+        with: { persist-credentials: false }
+      - name: actionlint
+        uses: docker://rhysd/actionlint:1.7.7
+        with: { args: -color }
+
+  container:
+    runs-on: ubuntu-latest
+    timeout-minutes: 20
+    steps:
+      - uses: actions/checkout@v4
+        with: { persist-credentials: false }
+      - uses: docker/setup-buildx-action@v3
+      - uses: docker/build-push-action@v6
+        with:
+          context: .
+          load: true
+          tags: evidence-custody:ci
+          cache-from: type=gha
+          cache-to: type=gha,mode=max
+      - name: Scan image (fail on fixable HIGH/CRITICAL)
+        uses: aquasecurity/trivy-action@0.28.0
+        with:
+          image-ref: evidence-custody:ci
+          severity: HIGH,CRITICAL
+          ignore-unfixed: true
+          exit-code: "1"
+      - name: Smoke test hardened container (read-only rootfs, no caps)
+        env:
+          KEY: "0000000000000000000000000000000000000000000000000000000000000001"
+        run: |
+          docker run -d --name c --read-only --tmpfs /tmp --cap-drop ALL \
+            --security-opt no-new-privileges -p 8080:8080 \
+            -e CUSTODY_SIGNING_KEY="$KEY" -e CUSTODY_TOKEN_SECRET=ci-secret \
+            -v ci-data:/var/lib/custody evidence-custody:ci
+          for i in $(seq 1 30); do curl -fsS localhost:8080/readyz && break; sleep 1; done
+          curl -fsS localhost:8080/metrics | grep -q custody_open_alerts
+          docker logs c
+
+  ci-ok:
+    name: ci-ok (required check)
+    if: always()
+    needs: [python, typescript, workflows-lint, container]
+    runs-on: ubuntu-latest
+    steps:
+      - name: Require every job to pass
+        run: |
+          echo '${{ toJSON(needs) }}' | grep -q '"result": "\(failure\|cancelled\)"' && exit 1 || true

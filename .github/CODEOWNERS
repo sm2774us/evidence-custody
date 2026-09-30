@@ -1,0 +1,7 @@
+# Security-sensitive paths require review from the security group (configure the team names).
+/src/custody/audit.py      @your-org/security
+/src/custody/storage.py    @your-org/security
+/src/custody/auth.py       @your-org/security
+/src/custody/service.py    @your-org/security
+/.github/                  @your-org/platform
+/deploy/                   @your-org/platform

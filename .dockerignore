@@ -1,0 +1,9 @@
+.git
+.github
+**/__pycache__
+**/node_modules
+.venv
+data
+tests
+sdk-ts
+docs
