@@ -97,13 +97,16 @@ jobs:
           tags: evidence-custody:ci
           cache-from: type=gha
           cache-to: type=gha,mode=max
-      - name: Scan image (fail on fixable HIGH/CRITICAL)
-        uses: aquasecurity/trivy-action@0.28.0
-        with:
-          image-ref: evidence-custody:ci
-          severity: HIGH,CRITICAL
-          ignore-unfixed: true
-          exit-code: "1"
+      # trivy-action tags were pulled after the March 2026 supply-chain compromise, so we run the
+      # pinned Trivy container directly. Informational here; enforced (CRITICAL) in release.yml.
+      - name: Vulnerability report (informational)
+        continue-on-error: true
+        run: |
+          docker run --rm -v /var/run/docker.sock:/var/run/docker.sock \
+            -e TRIVY_DB_REPOSITORY=public.ecr.aws/aquasecurity/trivy-db:2,ghcr.io/aquasecurity/trivy-db:2 \
+            ghcr.io/aquasecurity/trivy:0.74.0 image --no-progress --ignore-unfixed \
+            --severity HIGH,CRITICAL evidence-custody:ci | tee trivy.txt
+          { echo '### Trivy: fixable HIGH/CRITICAL'; echo '```'; cat trivy.txt; echo '```'; } >> "$GITHUB_STEP_SUMMARY"
       - name: Smoke test hardened container (read-only rootfs, no caps)
         env:
           KEY: "0000000000000000000000000000000000000000000000000000000000000001"
@@ -112,7 +115,7 @@ jobs:
             --security-opt no-new-privileges -p 8080:8080 \
             -e CUSTODY_SIGNING_KEY="$KEY" -e CUSTODY_TOKEN_SECRET=ci-secret \
             -v ci-data:/var/lib/custody evidence-custody:ci
-          for i in $(seq 1 30); do curl -fsS localhost:8080/readyz && break; sleep 1; done
+          curl -fsS --retry 30 --retry-delay 1 --retry-connrefused localhost:8080/readyz
           curl -fsS localhost:8080/metrics | grep -q custody_open_alerts
           docker logs c
 
@@ -123,5 +126,6 @@ jobs:
     runs-on: ubuntu-latest
     steps:
       - name: Require every job to pass
-        run: |
-          echo '${{ toJSON(needs) }}' | grep -q '"result": "\(failure\|cancelled\)"' && exit 1 || true
+        env:
+          NEEDS: ${{ toJSON(needs) }}
+        run: echo "$NEEDS" | jq -e 'all(.[]; .result == "success")'

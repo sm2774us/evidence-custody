@@ -70,7 +70,7 @@ jobs:
       - name: gitleaks (full history)
         run: |
           docker run --rm -v "$PWD:/repo" ghcr.io/gitleaks/gitleaks:v8.21.2 \
-            detect --source /repo --redact --verbose
+            detect --source /repo --config /repo/.gitleaks.toml --redact --verbose
 
   dependency-review:
     if: github.event_name == 'pull_request'

@@ -11,7 +11,7 @@ ENV PYTHONDONTWRITEBYTECODE=1 PYTHONUNBUFFERED=1 CUSTODY_DATA_DIR=/var/lib/custo
 RUN useradd --system --uid 10001 --no-create-home --shell /usr/sbin/nologin custody \
  && mkdir -p /var/lib/custody && chown custody /var/lib/custody
 COPY --from=build /wheels /wheels
-RUN pip install --no-index --find-links=/wheels evidence-custody[s3] && rm -rf /wheels
+RUN pip install --no-index --find-links=/wheels "evidence-custody[s3]" && rm -rf /wheels
 USER 10001
 EXPOSE 8080
 VOLUME ["/var/lib/custody"]

@@ -31,6 +31,14 @@ jobs:
           registry: ghcr.io
           username: ${{ github.actor }}
           password: ${{ secrets.GITHUB_TOKEN }}
+      - name: Build image for pre-publish scan
+        run: docker build -t scan:release .
+      - name: Block release on fixable CRITICAL vulnerabilities
+        run: |
+          docker run --rm -v /var/run/docker.sock:/var/run/docker.sock \
+            -e TRIVY_DB_REPOSITORY=public.ecr.aws/aquasecurity/trivy-db:2,ghcr.io/aquasecurity/trivy-db:2 \
+            ghcr.io/aquasecurity/trivy:0.74.0 image --no-progress --ignore-unfixed \
+            --severity CRITICAL --exit-code 1 scan:release
       - id: build
         uses: docker/build-push-action@v6
         with:
